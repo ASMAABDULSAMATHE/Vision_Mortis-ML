@@ -1,4 +1,4 @@
-import app from "../server";
+import { handleVisionDetect } from "../server";
 
 export const config = {
   api: {
@@ -8,6 +8,6 @@ export const config = {
   },
 };
 
-export default function handler(req: any, res: any) {
-  return app(req, res);
+export default async function handler(req: any, res: any) {
+  return handleVisionDetect(req, res);
 }

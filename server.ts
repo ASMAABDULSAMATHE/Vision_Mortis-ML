@@ -199,7 +199,7 @@ function generateForensicSynthesisFallback(caseData: any, calculatedPmi?: any) {
 }
 
 // AI Multimodal Forensic Analysis & Pathology Synthesis Handler
-async function handlePathologySynthesis(req: express.Request, res: express.Response) {
+export async function handlePathologySynthesis(req: express.Request, res: express.Response) {
   try {
     const ai = getGeminiClient();
     const { caseData, calculatedPmi } = req.body;
@@ -307,7 +307,7 @@ app.post(["/api/ai-analyze", "/ai-analyze"], handlePathologySynthesis);
 app.post(["/api/synthesize-pathology", "/synthesize-pathology", "/api/synthesize-report", "/synthesize-report"], handlePathologySynthesis);
 
 // Computer Vision Image Analysis for Forensic Indicators (Supports up to 6 multi-perspective images)
-app.post(["/api/vision-detect", "/vision-detect"], async (req, res) => {
+export async function handleVisionDetect(req: express.Request, res: express.Response) {
   try {
     const ai = getGeminiClient();
     const { images, imageBase64, mimeType = "image/jpeg", notes = "" } = req.body;
@@ -363,35 +363,27 @@ app.post(["/api/vision-detect", "/vision-detect"], async (req, res) => {
           t.includes("livid") ||
           t.includes("livor") ||
           t.includes("hypostasis") ||
-          t.includes("eyelid") ||
-          t.includes("fluid") ||
-          t.includes("homicide") ||
-          t.includes("suicide") ||
-          t.includes("incident") ||
-          t.includes("accident") ||
-          t.includes("incision") ||
-          t.includes("evidence") ||
           t.includes("cadaver") ||
           t.includes("coroner") ||
           t.includes("morgue") ||
+          t.includes("mortuary") ||
           t.includes("decomp") ||
           t.includes("marbling") ||
           t.includes("greening") ||
           t.includes("larvae") ||
           t.includes("maggot") ||
           t.includes("entomology") ||
-          t.includes("cornea") ||
           t.includes("rigor") ||
           t.includes("algor") ||
           t.includes("autopsy") ||
-          t.includes("body") ||
+          t.includes("corpse") ||
           t.includes("post_mortem") ||
           t.includes("postmortem")
         );
       };
 
-      const isDocOrPaperwork = (name: string, tag: string) => {
-        if (isForensicSafelist(name) || isForensicSafelist(tag)) return false;
+      const isDocOrPaperwork = (name: string, _tag?: string) => {
+        if (isForensicSafelist(name)) return false;
         const n = name.toLowerCase();
         return (
           /\b(emirates_id|passport|driver_license|license|national_id|id_card|identity_card|id|identity|badge|receipt|invoice|slip|prescription|rx|form|paper|paperwork|report|medical_report|autopsy_report|screenshot|screen|capture|doc|document|notes|note|handwritten|contract|certificate|scan|scan_doc)\b/i.test(n) ||
@@ -402,17 +394,17 @@ app.post(["/api/vision-detect", "/vision-detect"], async (req, res) => {
         );
       };
 
-      const isLivingSelfie = (name: string, tag: string) => {
-        if (isForensicSafelist(name) || isForensicSafelist(tag)) return false;
+      const isLivingSelfie = (name: string, _tag?: string) => {
+        if (isForensicSafelist(name)) return false;
         const n = name.toLowerCase();
         return (
-          /\b(selfie|living_person|living|person|alive|portrait|boy|girl|man|woman|child|family|profile|me|vacation|party|self_portrait|smile|friend|casual_photo|face_photo)\b/i.test(n) ||
+          /\b(selfie|living_person|living|person|alive|portrait|boy|girl|man|woman|child|family|profile|me|vacation|party|self_portrait|smile|friend|casual_photo|face_photo|human)\b/i.test(n) ||
           /(selfie_photo|living_person|family_pic|profile_picture|alive_person|portrait_alive)/i.test(n)
         );
       };
 
-      const isUnrelatedSceneItem = (name: string, tag: string) => {
-        if (isForensicSafelist(name) || isForensicSafelist(tag)) return false;
+      const isUnrelatedSceneItem = (name: string, _tag?: string) => {
+        if (isForensicSafelist(name)) return false;
         const n = name.toLowerCase();
         return (
           /\b(coffee|cup|mug|dog|cat|pet|puppy|kitten|car|vehicle|traffic|meme|funny|food|meal|pizza|burger|plate|nature|tree|building|desk|chair|room|interior|flower|landscape)\b/i.test(n) ||
@@ -433,13 +425,13 @@ app.post(["/api/vision-detect", "/vision-detect"], async (req, res) => {
         notesLower.includes("distension") ||
         notesLower.includes("skin slippage") ||
         notesLower.includes("bullae") ||
-        tags.some((t) => t.includes("abdomen") || t.includes("tbs"));
+        imgList.some((i) => (i.name || "").toLowerCase().includes("bloat"));
 
       const hasMarbling =
         notesLower.includes("marbling") ||
         notesLower.includes("green") ||
         notesLower.includes("iliac") ||
-        tags.some((t) => t.includes("anterior") || t.includes("abdomen"));
+        imgList.some((i) => (i.name || "").toLowerCase().includes("marbling"));
 
       const hasSkeleton =
         notesLower.includes("skeleton") ||
@@ -1067,7 +1059,9 @@ Return ONLY a valid JSON object matching this exact schema:
       error: error.message || "Failed to analyze image with forensic vision AI",
     });
   }
-});
+}
+
+app.post(["/api/vision-detect", "/vision-detect"], handleVisionDetect);
 
 // Vite middleware setup
 async function startServer() {
