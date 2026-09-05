@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
@@ -1071,12 +1072,9 @@ async function startServer() {
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
-  });
-}
-
-// Vite dev-server middleware (local development only)
-async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+    });
+  } else {
+    // Vite dev-server middleware (local development only)
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
