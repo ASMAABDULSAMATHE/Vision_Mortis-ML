@@ -1065,19 +1065,23 @@ app.post(["/api/vision-detect", "/vision-detect"], handleVisionDetect);
 
 // Vite middleware setup
 async function startServer() {
+  // Serve built frontend static files in production (runs on both Vercel and traditional hosting)
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
+// Vite dev-server middleware (local development only)
+async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -1085,15 +1089,8 @@ async function startServer() {
   });
 }
 
-// Only launch standalone HTTP server when executed directly as main script and not in a serverless environment
-const isMainScript = Boolean(
-  process.argv[1] &&
-  (process.argv[1].endsWith("server.ts") ||
-   process.argv[1].endsWith("server.cjs") ||
-   process.argv[1].endsWith("server.js"))
-);
-
-if (isMainScript && !process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+// Only launch standalone HTTP server when not running in a serverless environment (e.g. Vercel)
+if (!process.env.VERCEL) {
   startServer();
 }
 
