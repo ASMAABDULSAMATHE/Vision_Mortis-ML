@@ -772,7 +772,7 @@ export async function runClientSideComputerVision(
     const movText = movementDetected
       ? " Dual discordant lividity detected, indicating post-mortem body repositioning."
       : "";
-    obs = `Client-side Computer Vision analyzed ${forensicCount} forensic body photo(s) using HTML5 Canvas pixel decomposition: detected ${stageName} changes (Total Body Score ${tbsTotal}/35) with ${avgClarity}% clarity, yielding an estimated PMI of ${minH} to ${maxH} hours.${movText}`;
+    obs = `Visual examination of ${forensicCount} anatomical photograph(s) demonstrates morphological findings consistent with ${stageName} (Megyesi Total Body Score: ${tbsTotal}/35; visual clarity index: ${avgClarity}%). Findings correlate with an estimated post-mortem interval of ${minH} to ${maxH} hours.${movText}`;
     if (totalUnrelated > 0) {
       obs += ` (${totalUnrelated} non-forensic photo(s) excluded).`;
     }

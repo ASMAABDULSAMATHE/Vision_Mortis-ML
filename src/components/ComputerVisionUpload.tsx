@@ -32,6 +32,8 @@ import {
   RotateCcw,
   Activity,
   Cpu,
+  Edit3,
+  Check,
 } from "lucide-react";
 import { UnrelatedIssueAlert } from "./UnrelatedIssueAlert";
 import { QualityBadge, QualityMeter, SingleImageQualityDetails } from "./VisionQualityCard";
@@ -495,7 +497,49 @@ export const ComputerVisionUpload: React.FC<Props> = ({
   const [zoomImage, setZoomImage] = useState<VisionImageItem | null>(null);
   const [showCalibration, setShowCalibration] = useState(false);
   const [activeEngine, setActiveEngine] = useState<"server" | "client_canvas">("server");
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [customSummaryText, setCustomSummaryText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEditSummary = () => {
+    setCustomSummaryText(
+      visionData.forensicObservations ||
+        "Visual examination of submitted photographic evidence indicates morphological findings consistent with the estimated post-mortem interval."
+    );
+    setIsEditingSummary(true);
+  };
+
+  const applySummaryPreset = (presetType: "formal" | "concise" | "autopsy" | "clean") => {
+    const forensicCount = (visionData.images || []).filter((img) => !img.isUnrelated).length || 1;
+    const stage = (visionData.detectedDecompositionStage || "early_marbling").replace(/_/g, " ");
+    const tbs = visionData.estimatedTbs?.totalScore ?? 8;
+    const minH = visionData.visualPmiWindowHours?.min ?? 6;
+    const maxH = visionData.visualPmiWindowHours?.max ?? 24;
+    const clarity = visionData.averageClarityScore ?? 90;
+    const movText = visionData.detectedMovement?.suspectedMovement
+      ? " Dual discordant lividity detected, indicating post-mortem body repositioning."
+      : "";
+
+    let text = "";
+    if (presetType === "formal") {
+      text = `Visual examination of ${forensicCount} anatomical photograph(s) demonstrates morphological characteristics consistent with ${stage} (Megyesi Total Body Score: ${tbs}/35; visual clarity index: ${clarity}%). Findings correlate with an estimated post-mortem interval window of ${minH} to ${maxH} hours.${movText}`;
+    } else if (presetType === "concise") {
+      text = `Photographic evidence: ${stage} identified (TBS ${tbs}/35; ${clarity}% clarity). Biological markers yield an estimated PMI of ${minH}–${maxH} hours. Posture consistent with post-mortem hypostasis.${movText}`;
+    } else if (presetType === "autopsy") {
+      text = `Post-mortem photographic inspection reveals morphological alterations congruent with ${stage} (TBS: ${tbs}/35). Lividity and physical changes support an estimated PMI window between ${minH} and ${maxH} hours post-mortem.${movText}`;
+    } else if (presetType === "clean") {
+      text = `Photographic analysis indicates findings consistent with ${stage} (Total Body Score: ${tbs}/35). Estimated post-mortem interval: ${minH} to ${maxH} hours.${movText}`;
+    }
+    setCustomSummaryText(text);
+  };
+
+  const handleSaveCustomSummary = () => {
+    onVisionUpdate({
+      ...visionData,
+      forensicObservations: customSummaryText.trim(),
+    });
+    setIsEditingSummary(false);
+  };
 
   const isCollapsed = isOpen !== undefined ? !isOpen : internalCollapsed;
   const toggleCollapse = () => {
@@ -1779,24 +1823,122 @@ export const ComputerVisionUpload: React.FC<Props> = ({
                         </div>
                       )}
 
-                      {/* Photo Analysis Summary - Short Description */}
-                      <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-1.5 leading-relaxed">
-                        <div className="flex items-center justify-between">
-                          <div className="font-semibold text-teal-400 text-xs flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                            <span>Photo Analysis Summary:</span>
+                      {/* Photo Analysis Summary - Short Description & Pathologist Wording Customizer */}
+                      {!isEditingSummary ? (
+                        <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-2 leading-relaxed">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="font-semibold text-teal-400 text-xs flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                              <span>Photo Analysis Summary:</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {!visionData.detectedMovement?.suspectedMovement && (
+                                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80">
+                                  Posture: Consistent (No Movement)
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={handleStartEditSummary}
+                                className="text-[11px] font-medium px-2.5 py-0.5 rounded-md bg-teal-950/80 hover:bg-teal-900 text-teal-300 hover:text-teal-100 border border-teal-700/70 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                title="Click to customize, rephrase, or edit the summary wording"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Edit Wording</span>
+                              </button>
+                            </div>
                           </div>
-                          {!visionData.detectedMovement?.suspectedMovement && (
-                            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/80">
-                              Posture: Consistent (No Movement)
-                            </span>
-                          )}
+                          <p className="text-slate-200 leading-relaxed text-xs">
+                            {visionData.forensicObservations ||
+                              "Visual examination of submitted photographic evidence indicates morphological findings consistent with the estimated post-mortem interval."}
+                          </p>
                         </div>
-                        <p className="text-slate-300 leading-relaxed text-xs">
-                          {visionData.forensicObservations ||
-                            "Biological findings from submitted photos are consistent with the estimated post-mortem interval."}
-                        </p>
-                      </div>
+                      ) : (
+                        <div className="p-3.5 rounded-xl bg-slate-900 border border-teal-500/50 text-xs text-slate-300 space-y-3 leading-relaxed shadow-lg shadow-teal-950/20">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-semibold text-teal-300 text-xs flex items-center gap-1.5">
+                              <Edit3 className="w-3.5 h-3.5 text-teal-400" />
+                              <span>Customize Summary Wording</span>
+                            </div>
+                            <span className="text-[10.5px] text-teal-400/80 font-mono">
+                              Interactive Clinical Narrative
+                            </span>
+                          </div>
+
+                          {/* Quick Preset Wording Chips */}
+                          <div className="space-y-1">
+                            <div className="text-[10.5px] text-slate-400 font-medium">One-Click Phrasing Presets:</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => applySummaryPreset("formal")}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10.5px] text-teal-300 border border-slate-700 transition-colors cursor-pointer"
+                              >
+                                Formal Medico-Legal
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applySummaryPreset("concise")}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10.5px] text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+                              >
+                                Concise Case Note
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applySummaryPreset("autopsy")}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10.5px] text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+                              >
+                                Autopsy Finding
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applySummaryPreset("clean")}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10.5px] text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+                              >
+                                Simplified
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Custom Textarea */}
+                          <textarea
+                            value={customSummaryText}
+                            onChange={(e) => setCustomSummaryText(e.target.value)}
+                            rows={3}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400 leading-relaxed font-sans"
+                            placeholder="Enter custom forensic photo analysis summary wording..."
+                          />
+
+                          {/* Controls */}
+                          <div className="flex items-center justify-between pt-1">
+                            <button
+                              type="button"
+                              onClick={() => applySummaryPreset("formal")}
+                              className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Reset to Default</span>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingSummary(false)}
+                                className="px-2.5 py-1 rounded-md text-[11px] text-slate-300 hover:bg-slate-800 border border-slate-700 cursor-pointer transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveCustomSummary}
+                                className="px-3 py-1 rounded-md text-[11px] font-semibold bg-teal-600 hover:bg-teal-500 text-white flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Save Summary Wording</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Pathologist Calibration & Fine-Tuning Toggle */}
                       <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden text-xs">
