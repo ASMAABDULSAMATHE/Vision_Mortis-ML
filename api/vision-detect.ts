@@ -3,7 +3,7 @@ import { processVisionDetect } from "../src/server/geminiVisionService";
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "10mb",
+      sizeLimit: "4mb",
     },
   },
 };
@@ -13,12 +13,17 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const result = await processVisionDetect(req.body);
-  if (!result.success && result.error?.includes("Missing image data")) {
-    return res.status(400).json(result);
+  try {
+    const result = await processVisionDetect(req.body);
+    if (!result.success && result.error?.includes("Missing image data")) {
+      return res.status(400).json(result);
+    }
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("[Vercel Vision Detect Error]:", error);
+    return res.status(200).json({
+      success: false,
+      error: error?.message || "Failed to analyze image with forensic vision AI",
+    });
   }
-  if (!result.success) {
-    return res.status(500).json(result);
-  }
-  return res.status(200).json(result);
 }

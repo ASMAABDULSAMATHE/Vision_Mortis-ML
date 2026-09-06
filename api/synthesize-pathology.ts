@@ -3,7 +3,7 @@ import { processPathologySynthesis } from "../src/server/geminiVisionService";
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "10mb",
+      sizeLimit: "4mb",
     },
   },
 };
@@ -13,9 +13,14 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const result = await processPathologySynthesis(req.body);
-  if (!result.success) {
-    return res.status(500).json(result);
+  try {
+    const result = await processPathologySynthesis(req.body);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("[Vercel Synthesize Error]:", error);
+    return res.status(200).json({
+      success: false,
+      error: error?.message || "Failed to synthesize forensic pathology",
+    });
   }
-  return res.status(200).json(result);
 }

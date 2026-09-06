@@ -2,14 +2,8 @@ export default function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   return res.status(200).json({
     status: "ok",
-    message: "Vision Mortis Serverless API",
-    endpoints: [
-      "/api/health",
-      "/api/vision-detect",
-      "/api/synthesize-pathology",
-      "/api/ml-predict",
-    ],
     hasApiKey: !!process.env.GEMINI_API_KEY,
+    appName: "Vision Mortis Protocol One",
     timestamp: new Date().toISOString(),
   });
 }
