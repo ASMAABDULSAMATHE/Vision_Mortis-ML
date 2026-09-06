@@ -166,52 +166,51 @@ export async function analyzeImageWithCanvas(
         const [hsvH, hsvS, hsvV] = rgbToHsv(r, g, b);
 
         // Document / Paper check (bright white background with dark high-contrast ink)
-        // Livor Mortis detection: violaceous / dark purplish-red settling
-        // Plum/magenta/purple: Hue ~ 310° - 355° or 355° - 15° with moderate saturation
+        // Livor Mortis detection: violaceous / dark purplish-red settling strictly in plum/purple hue range
+        // Plum/magenta/purple: Hue ~ 285° - 345° with moderate saturation (excludes normal vital red hues)
         const isPurplishLivor =
-          ((hsvH >= 310 && hsvH <= 355) || (hsvH >= 355 || hsvH <= 15)) &&
-          hsvS >= 22 &&
+          ((hsvH >= 285 && hsvH <= 345) || (hsvH >= 310 && hsvH <= 350 && r > 50 && b > 50 && g < Math.min(r, b) * 0.85)) &&
+          hsvS >= 20 &&
           hsvS <= 80 &&
           hsvV >= 18 &&
-          hsvV <= 75 &&
-          r > g + 12;
+          hsvV <= 75;
 
         if (isPurplishLivor) {
           livorPixels++;
         }
 
-        // Greening Decomposition: cecal / right iliac fossa green discoloration
-        // Sulfhemoglobin staining: Hue 65° - 135°, G > R + 6, G > B + 8, earthy saturation
+        // Greening Decomposition: localized cecal / right iliac fossa earthy green discoloration
+        // Authentic sulfhemoglobin staining: Hue 70° - 125°, earthy muted olive (not vibrant plant/shirt green)
         const isGreening =
-          hsvH >= 65 &&
-          hsvH <= 135 &&
-          g > r + 6 &&
+          hsvH >= 70 &&
+          hsvH <= 125 &&
+          g > r + 8 &&
           g > b + 8 &&
-          hsvS >= 18 &&
-          hsvS <= 75 &&
-          hsvV >= 18 &&
-          hsvV <= 80;
+          hsvS >= 25 &&
+          hsvS <= 70 &&
+          hsvV >= 20 &&
+          hsvV <= 75;
 
         if (isGreening) {
           greeningPixels++;
         }
 
-        // Living normal human skin check (vital flushed capillary hemoglobin, high pinkness, smooth gradient)
+        // Living human skin tone detection across diverse complexions (Fitzpatrick I–VI)
+        // Red-dominant hemoglobin + melanin spectrum with balanced gradient
         const isLivingSkinTone =
-          r > 95 &&
-          g > 40 &&
-          b > 20 &&
+          r > 40 &&
+          g > 25 &&
+          b > 15 &&
           r > g &&
           r > b &&
-          r - g > 15 &&
-          Math.abs(r - g) < 85 &&
-          hsvH >= 10 &&
-          hsvH <= 38 &&
-          hsvS >= 25 &&
-          hsvS <= 68 &&
-          hsvV >= 45;
+          r - g >= 4 &&
+          ((hsvH >= 0 && hsvH <= 55) || (hsvH >= 350 && hsvH <= 360)) &&
+          hsvS >= 6 &&
+          hsvS <= 88 &&
+          hsvV >= 18 &&
+          !isPurplishLivor;
 
-        if (isLivingSkinTone && !isPurplishLivor && !isGreening) {
+        if (isLivingSkinTone && !isPurplishLivor) {
           livingSkinPixels++;
         }
 
@@ -328,42 +327,59 @@ export async function analyzeImageWithCanvas(
           lowerName
         );
 
+      // Explicit corpse/autopsy terms check
+      const hasCorpseKeyword =
+        lowerName.includes("cadaver") ||
+        lowerName.includes("corpse") ||
+        lowerName.includes("autopsy") ||
+        lowerName.includes("morgue") ||
+        lowerName.includes("mortuary") ||
+        lowerName.includes("post_mortem") ||
+        lowerName.includes("postmortem");
+
       const livingSkinRatio = livingSkinPixels / totalPixels;
       const livorRatio = livorPixels / totalPixels;
       const greeningRatio = greeningPixels / totalPixels;
       const boneRatio = boneWhitePixels / totalPixels;
       const maggotRatio = maggotCreamPixels / totalPixels;
 
+      // Extreme post-mortem markers check (autopsy, skeletonization, active larval mass, cecal greening)
+      const hasExtremeForensicMarkers =
+        hasCorpseKeyword ||
+        boneRatio > 0.25 ||
+        maggotRatio > 0.03 ||
+        greeningRatio > 0.15 ||
+        lowerName.includes("decomp") ||
+        lowerName.includes("maggot") ||
+        lowerName.includes("larvae") ||
+        lowerName.includes("bloat") ||
+        lowerName.includes("purge") ||
+        lowerName.includes("skeleton");
+
+      // Living human: detected skin tone, absence of corpse keywords, and absence of extreme forensic markers
+      // Real living human beings are protected from false post-mortem decay classification
       const isLivingPerson =
         !isDocumentOrText &&
+        !hasExtremeForensicMarkers &&
         (filenameLivingMatch ||
-          (livingSkinRatio > 0.06 &&
-            livorRatio < 0.025 &&
-            greeningRatio < 0.025 &&
-            meanLuminance > 50 &&
-            meanLuminance < 225) ||
-          (livingSkinRatio > 0.03 &&
-            boneRatio < 0.04 &&
-            maggotRatio < 0.01 &&
-            livorRatio < 0.015 &&
-            greeningRatio < 0.015 &&
-            meanLuminance > 55));
+          livingSkinRatio > 0.0015 ||
+          !hasCorpseKeyword);
 
       const isForensicCorpse = !isDocumentOrText && !isLivingPerson;
 
       // 5. Determine Decomposition Stage & Total Body Score from Pixels
-      let dominantDecompStage: PixelAnalysisResult["dominantDecompStage"] = "early_marbling";
-      let tbsHead = 3;
-      let tbsTrunk = 3;
-      let tbsLimbs = 2;
-      let minH = 10;
-      let maxH = 24;
+      let dominantDecompStage: PixelAnalysisResult["dominantDecompStage"] = "fresh";
+      let tbsHead = 1;
+      let tbsTrunk = 1;
+      let tbsLimbs = 1;
+      let minH = 0;
+      let maxH = 0;
 
       if (isLivingPerson || isDocumentOrText) {
         dominantDecompStage = "fresh";
-        tbsHead = 1;
-        tbsTrunk = 1;
-        tbsLimbs = 1;
+        tbsHead = 0;
+        tbsTrunk = 0;
+        tbsLimbs = 0;
         minH = 0;
         maxH = 0;
       } else if (boneRatio > 0.32 || lowerName.includes("skeleton") || lowerName.includes("bone")) {
@@ -386,10 +402,10 @@ export async function analyzeImageWithCanvas(
         minH = 48;
         maxH = 120;
       } else if (
-        greeningRatio > 0.08 ||
-        lowerName.includes("bloat") ||
-        lowerName.includes("purge") ||
-        (tag.includes("abdomen") && greeningRatio > 0.03)
+        !isLivingPerson &&
+        (lowerName.includes("bloat") ||
+          lowerName.includes("purge") ||
+          (greeningRatio > 0.12 && livorRatio > 0.06))
       ) {
         dominantDecompStage = "bloating_purge";
         tbsHead = 5;
@@ -397,7 +413,7 @@ export async function analyzeImageWithCanvas(
         tbsLimbs = 4;
         minH = 24;
         maxH = 72;
-      } else if (greeningRatio > 0.02 || livorRatio > 0.05 || lowerName.includes("marbling")) {
+      } else if (!isLivingPerson && (greeningRatio > 0.04 || livorRatio > 0.06 || lowerName.includes("marbling"))) {
         dominantDecompStage = "early_marbling";
         tbsHead = 3;
         tbsTrunk = 3;
@@ -640,13 +656,12 @@ export async function runClientSideComputerVision(
   // Aggregate forensic results across all valid images
   const validForensicPixels = pixelResults.filter((_, idx) => !updatedImages[idx].isUnrelated);
 
-  let aggregateStage: "fresh" | "early_marbling" | "bloating_purge" | "active_decay" | "skeletonization" =
-    "early_marbling";
-  let aggTbsHead = 3;
-  let aggTbsTrunk = 3;
-  let aggTbsLimbs = 2;
-  let minH = 10;
-  let maxH = 24;
+  let aggregateStage: "fresh" | "early_marbling" | "bloating_purge" | "active_decay" | "skeletonization" = "fresh";
+  let aggTbsHead = 0;
+  let aggTbsTrunk = 0;
+  let aggTbsLimbs = 0;
+  let minH = 0;
+  let maxH = 0;
 
   if (validForensicPixels.length > 0) {
     // Pick the most advanced decomposition stage detected on body
@@ -770,30 +785,49 @@ export async function runClientSideComputerVision(
     updatedImages,
     detectedDecompositionStage: allUnrelated ? "fresh" : aggregateStage,
     estimatedTbs: allUnrelated
-      ? { headNeckScore: 1, trunkScore: 1, limbsScore: 1, totalScore: 3 }
+      ? { headNeckScore: 0, trunkScore: 0, limbsScore: 0, totalScore: 0 }
       : { headNeckScore: aggTbsHead, trunkScore: aggTbsTrunk, limbsScore: aggTbsLimbs, totalScore: tbsTotal },
-    detectedLivor: {
-      colorClassification: "standard_violaceous",
-      distribution: movementDetected
-        ? "Dual discordant lividity: purple settling on both anterior and posterior anatomical planes"
-        : "Purple discoloration settling on dependent lower body surfaces with contact blanching",
-      estimatedFixation: hasLarvae ? "fully_fixed" : "partially_fixed",
-    },
-    detectedEntomology: {
-      insectsPresent: hasLarvae,
-      primaryInsectStage: hasLarvae ? "second_instar" : "none",
-      maggotMassPresent: hasLarvae,
-      description: hasLarvae
-        ? "High-frequency cream larval cluster textures detected in anatomical folds."
-        : "No insect clusters detected on current body views.",
-    },
-    detectedOcularChanges: {
-      cornealClouding: hasCornea ? "moderate_clouding" : "translucent_hazy",
-      tacheNoirePresent: false,
-      description: hasCornea
-        ? "Moderate corneal haziness detected on orbital crop (~10–24h post-mortem)."
-        : "Eyes not oriented on current photos.",
-    },
+    detectedLivor: allUnrelated
+      ? {
+          colorClassification: "none",
+          distribution: "No post-mortem blood settling (living or non-forensic subject excluded)",
+          estimatedFixation: "none",
+        }
+      : {
+          colorClassification: "standard_violaceous",
+          distribution: movementDetected
+            ? "Dual discordant lividity: purple settling on both anterior and posterior anatomical planes"
+            : "Purple discoloration settling on dependent lower body surfaces with contact blanching",
+          estimatedFixation: hasLarvae ? "fully_fixed" : "partially_fixed",
+        },
+    detectedEntomology: allUnrelated
+      ? {
+          insectsPresent: false,
+          primaryInsectStage: "none",
+          maggotMassPresent: false,
+          description: "No insect activity (living or non-forensic subject excluded)",
+        }
+      : {
+          insectsPresent: hasLarvae,
+          primaryInsectStage: hasLarvae ? "second_instar" : "none",
+          maggotMassPresent: hasLarvae,
+          description: hasLarvae
+            ? "High-frequency cream larval cluster textures detected in anatomical folds."
+            : "No insect clusters detected on current body views.",
+        },
+    detectedOcularChanges: allUnrelated
+      ? {
+          cornealClouding: "none",
+          tacheNoirePresent: false,
+          description: "Normal vital ocular structures (living subject excluded).",
+        }
+      : {
+          cornealClouding: hasCornea ? "moderate_clouding" : "translucent_hazy",
+          tacheNoirePresent: false,
+          description: hasCornea
+            ? "Moderate corneal haziness detected on orbital crop (~10–24h post-mortem)."
+            : "Eyes not oriented on current photos.",
+        },
     detectedMovement,
     unrelatedImagesDetected: totalUnrelated > 0,
     unrelatedImageCount: totalUnrelated,

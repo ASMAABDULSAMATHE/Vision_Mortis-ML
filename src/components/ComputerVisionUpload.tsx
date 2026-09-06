@@ -247,27 +247,27 @@ const analyzeImagePixelMetrics = (
               }
             }
 
-            // Living human skin tone detection (healthy warm melanin spectrum, balanced hemoglobin)
+            // Living human skin tone detection (Fitzpatrick I–VI: red-dominant hemoglobin and melanin spectrum)
             const isSkinLocus =
-              r > 90 &&
-              g > 40 &&
-              b > 20 &&
-              d > 15 &&
+              r > 45 &&
+              g > 25 &&
+              b > 15 &&
               r > g &&
               r > b &&
-              h >= 5 &&
-              h <= 38 &&
-              s >= 0.18 &&
-              s <= 0.72;
+              r - g > 6 &&
+              h >= 0 &&
+              h <= 52 &&
+              s >= 0.08 &&
+              s <= 0.85;
 
             if (isSkinLocus) {
               livingSkinPixels++;
             }
 
-            // Greening detection (taphonomic decomposition sulfhemoglobin)
+            // Greening detection (authentic taphonomic decomposition sulfhemoglobin)
             if (
-              (g > r * 1.12 && g > b * 1.12 && g > 35 && g < 210) ||
-              (h >= 65 && h <= 130 && s > 0.22 && lum > 30)
+              (g > r * 1.15 && g > b * 1.15 && g > 40 && g < 180 && s > 0.25 && lum > 35 && lum < 160) ||
+              (h >= 70 && h <= 125 && s > 0.25 && s < 0.70 && lum > 30 && lum < 160)
             ) {
               greenHuePixels++;
             }
@@ -339,21 +339,31 @@ const analyzeImagePixelMetrics = (
           (paperRatio > 0.65 && skinRatio < 0.10) ||
           (hasDocFilename && !isSafeForensic);
 
-        // Visual living human detector: healthy skin tones present with complete absence of cadaveric lividity & decomposition
-        const hasZeroDecompMarkers = livorRatio < 0.025 && greenRatio < 0.025;
+        // Explicit corpse/autopsy terms check
+        const hasCorpseKeyword =
+          lowerName.includes("cadaver") ||
+          lowerName.includes("corpse") ||
+          lowerName.includes("autopsy") ||
+          lowerName.includes("morgue") ||
+          lowerName.includes("mortuary") ||
+          lowerName.includes("post_mortem") ||
+          lowerName.includes("postmortem");
+
+        // Visual living human detector: healthy skin tones present with absence of corpse keywords
         const isVisualLivingPerson =
           !isVisualDocument &&
+          !hasCorpseKeyword &&
           (hasLiveFilename ||
-            (hasZeroDecompMarkers && skinRatio > 0.06 && darkRatio < 0.70) ||
-            (hasZeroDecompMarkers && skinRatio > 0.03 && avgBrightness > 60 && avgBrightness < 215) ||
-            (!isSafeForensic && skinRatio > 0.12 && livorRatio < 0.03));
+            skinRatio > 0.012 ||
+            (skinRatio > 0.006 && livorRatio < 0.04));
 
         // Visual unrelated object detector: low skin, low paper, low forensic markers
         const isVisualObject =
           !isVisualDocument &&
           !isVisualLivingPerson &&
           !isSafeForensic &&
-          (hasObjectFilename || (skinRatio < 0.03 && livorRatio < 0.015 && greenRatio < 0.015 && paperRatio < 0.30));
+          !hasCorpseKeyword &&
+          (hasObjectFilename || (skinRatio < 0.005 && livorRatio < 0.015 && greenRatio < 0.015 && paperRatio < 0.30));
 
         if (isVisualDocument) {
           detectedCategory = "writing_or_document";
@@ -879,9 +889,11 @@ export const ComputerVisionUpload: React.FC<Props> = ({
     setErrorMsg(null);
 
     try {
+      const targetDim = imagesToAnalyze.length > 3 ? 960 : 1200;
+      const targetQuality = imagesToAnalyze.length > 3 ? 0.78 : 0.82;
       const payloadImages = await Promise.all(
         imagesToAnalyze.map(async (img) => {
-          const optimizedBase64 = await downscaleImageForApi(img.dataUrl, 1200, 0.82);
+          const optimizedBase64 = await downscaleImageForApi(img.dataUrl, targetDim, targetQuality);
           return {
             id: img.id,
             name: img.name,
@@ -1680,50 +1692,66 @@ export const ComputerVisionUpload: React.FC<Props> = ({
 
                     <div className="space-y-3 text-xs">
                       {/* 3 Biological Findings Grid in Plain Language */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        {/* Decomposition Stage */}
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                          <div className="text-[11px] text-slate-400 font-medium">
-                            Decomposition Stage
-                          </div>
-                          <div className="text-amber-300 font-bold capitalize text-sm">
-                            {visionData.detectedDecompositionStage?.replace(/_/g, " ") || "Indeterminate"}
-                          </div>
-                          {visionData.estimatedTbs && (
-                            <div className="text-[11px] text-slate-400 mt-1">
-                              Decay Score:{" "}
-                              <span className="font-mono text-amber-400 font-semibold">
-                                {visionData.estimatedTbs.totalScore} / 35
-                              </span>
+                      {(() => {
+                        const isAllExcluded =
+                          visionData.unrelatedImagesDetected &&
+                          (!visionData.images || visionData.images.length === 0 || visionData.images.every((img) => img.isUnrelated));
+
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                            {/* Decomposition Stage */}
+                            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+                              <div className="text-[11px] text-slate-400 font-medium">
+                                Decomposition Stage
+                              </div>
+                              <div className={`font-bold capitalize text-sm ${isAllExcluded ? "text-slate-400" : "text-amber-300"}`}>
+                                {isAllExcluded
+                                  ? "Excluded (Living / Non-Forensic)"
+                                  : visionData.detectedDecompositionStage?.replace(/_/g, " ") || "Indeterminate"}
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-1">
+                                Decay Score:{" "}
+                                <span className="font-mono text-amber-400 font-semibold">
+                                  {isAllExcluded ? "0 / 35 (N/A)" : `${visionData.estimatedTbs?.totalScore ?? 0} / 35`}
+                                </span>
+                              </div>
                             </div>
-                          )}
-                        </div>
 
-                        {/* Blood Settling / Lividity */}
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                          <div className="text-[11px] text-slate-400 font-medium">Skin Color & Blood Settling</div>
-                          <div className="text-purple-300 font-bold capitalize text-sm">
-                            {visionData.detectedLivor?.colorClassification?.replace(/_/g, " ") || "Purple / Violaceous"}
-                          </div>
-                          <div className="text-[11px] text-slate-400 mt-1">
-                            Blanching:{" "}
-                            <span className="font-semibold text-slate-200 capitalize">
-                              {visionData.detectedLivor?.estimatedFixation?.replace(/_/g, " ") || "Partially Fixed"}
-                            </span>
-                          </div>
-                        </div>
+                            {/* Blood Settling / Lividity */}
+                            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+                              <div className="text-[11px] text-slate-400 font-medium">Skin Color & Blood Settling</div>
+                              <div className={`font-bold capitalize text-sm ${isAllExcluded ? "text-emerald-400" : "text-purple-300"}`}>
+                                {isAllExcluded
+                                  ? "Vital Capillary Perfusion"
+                                  : visionData.detectedLivor?.colorClassification?.replace(/_/g, " ") || "Purple / Violaceous"}
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-1">
+                                Blanching:{" "}
+                                <span className="font-semibold text-slate-200 capitalize">
+                                  {isAllExcluded
+                                    ? "N/A (Living Subject)"
+                                    : visionData.detectedLivor?.estimatedFixation?.replace(/_/g, " ") || "Partially Fixed"}
+                                </span>
+                              </div>
+                            </div>
 
-                        {/* Insect / Maggot Activity */}
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                          <div className="text-[11px] text-slate-400 font-medium">Insect / Maggot Activity</div>
-                          <div className="text-emerald-300 font-bold capitalize text-sm">
-                            {visionData.detectedEntomology?.primaryInsectStage?.replace(/_/g, " ") || "None Visible"}
+                            {/* Insect / Maggot Activity */}
+                            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+                              <div className="text-[11px] text-slate-400 font-medium">Insect / Maggot Activity</div>
+                              <div className="text-emerald-300 font-bold capitalize text-sm">
+                                {isAllExcluded
+                                  ? "None (Living Subject)"
+                                  : visionData.detectedEntomology?.primaryInsectStage?.replace(/_/g, " ") || "None Visible"}
+                              </div>
+                              <div className="text-[11px] text-slate-400 line-clamp-1 mt-1">
+                                {isAllExcluded
+                                  ? "No post-mortem insect colonization on living subject"
+                                  : visionData.detectedEntomology?.description || "No visible insects on submitted photos"}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-[11px] text-slate-400 line-clamp-1 mt-1">
-                            {visionData.detectedEntomology?.description || "No visible insects on submitted photos"}
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Post-Mortem Body Movement Alert (Only if Suspected) */}
                       {visionData.detectedMovement?.suspectedMovement && (
